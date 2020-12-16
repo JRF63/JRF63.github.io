@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag v2.7.1 -->
+<title>Exploring fast-math in Rust: Part 1 - Global -Z flag | JRF63.github.io</title>
+<meta name="generator" content="Jekyll v4.1.1" />
+<meta property="og:title" content="Exploring fast-math in Rust: Part 1 - Global -Z flag" />
+<meta name="author" content="Joseph Rafael Ferrer" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Write an awesome description for your new site here. You can edit this line in _config.yml. It will appear in your document head meta (for Google search results) and in your feed.xml site description." />
+<meta property="og:description" content="Write an awesome description for your new site here. You can edit this line in _config.yml. It will appear in your document head meta (for Google search results) and in your feed.xml site description." />
+<link rel="canonical" href="http://localhost:4000/rust/fast-math/2020/12/16/fast-math-rust-pt1.html" />
+<meta property="og:url" content="http://localhost:4000/rust/fast-math/2020/12/16/fast-math-rust-pt1.html" />
+<meta property="og:site_name" content="JRF63.github.io" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-12-16T11:00:00+08:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Exploring fast-math in Rust: Part 1 - Global -Z flag" />
+<script type="application/ld+json">
+{"@type":"BlogPosting","url":"http://localhost:4000/rust/fast-math/2020/12/16/fast-math-rust-pt1.html","headline":"Exploring fast-math in Rust: Part 1 - Global -Z flag","dateModified":"2020-12-16T11:00:00+08:00","datePublished":"2020-12-16T11:00:00+08:00","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/rust/fast-math/2020/12/16/fast-math-rust-pt1.html"},"author":{"@type":"Person","name":"Joseph Rafael Ferrer"},"description":"Write an awesome description for your new site here. You can edit this line in _config.yml. It will appear in your document head meta (for Google search results) and in your feed.xml site description.","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" title="JRF63.github.io" /></head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/">JRF63.github.io</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/about/">About</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">Exploring fast-math in Rust: Part 1 - Global -Z flag</h1>
+    <p class="post-meta">
+      <time class="dt-published" datetime="2020-12-16T11:00:00+08:00" itemprop="datePublished">Dec 16, 2020
+      </time></p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <style type="text/css">
+#twocol {
+    position: relative;
+    display: flex;
+    margin-bottom: 15px;
+    overflow-y: hidden;
+}
+
+.closed {
+    height: 700px;
+    transition: height 0.8s ease-in-out;
+}
+
+.expanded {
+    height: 2760px;
+}
+
+#subcol {
+    flex: 1 1;
+    overflow-x: hidden;
+    overflow-y: hidden;
+}
+
+#subcol > figure, #subcol > figure > pre {
+    margin-bottom: 0px;
+    scrollbar-width: none;
+}
+
+#subcol > figure > pre::-webkit-scrollbar {
+    display: none;
+}
+
+#divider {
+    flex-basis: 4px;
+}
+
+#button {
+    position: absolute;
+    left: 0%;
+    bottom: 0%;
+    width: 100%;
+    border: none;
+    outline: none;
+    height: 30px;
+    background: linear-gradient(to top, #cccccc, Transparent);
+    opacity: 0.8;
+    font-size: 14;
+}
+</style>
+
+<h2 id="tldr">TL;DR</h2>
+
+<p><a href="https://github.com/JRF63/rust/tree/fastmath-flag">This branch</a> on my fork.</p>
+
+<h2 id="quick-and-dirty">Quick and dirty</h2>
+
+<p>Creating a flag to enable fast-math is surprisingly not that hard. We first repurpose <code class="language-plaintext highlighter-rouge">LLVMRustSetHasUnsafeAlgebra</code> to do a check if the instruction passed to it is an <code class="language-plaintext highlighter-rouge">FPMathOperator</code> so that we can use it for <code class="language-plaintext highlighter-rouge">phi</code>, <code class="language-plaintext highlighter-rouge">select</code> and <code class="language-plaintext highlighter-rouge">call</code> without bothering non-floats:</p>
+
+<figure class="highlight"><pre><code class="language-diff" data-lang="diff"><span class="gd">--- a/compiler/rustc_llvm/llvm-wrapper/RustWrapper.cpp
+</span><span class="gi">+++ b/compiler/rustc_llvm/llvm-wrapper/RustWrapper.cpp
+</span>
+ extern "C" void LLVMRustSetHasUnsafeAlgebra(LLVMValueRef V) {
+<span class="gd">-  if (auto I = dyn_cast&lt;Instruction&gt;(unwrap&lt;Value&gt;(V))) {
+-    I-&gt;setFast(true);
+</span><span class="gi">+  Value *Ptr = unwrap(V);
++  if (isa&lt;FPMathOperator&gt;(Ptr)) {
++    if (auto I = dyn_cast&lt;Instruction&gt;(Ptr)) {
++      I-&gt;setFast(true);
++    }
+</span>   }
+ }</code></pre></figure>
+
+<p>Presupposing we already coded in the flag, we just slap <code class="language-plaintext highlighter-rouge">LLVMRustSetHasUnsafeAlgebra</code> on each of the float operations and <code class="language-plaintext highlighter-rouge">phi</code>, <code class="language-plaintext highlighter-rouge">select</code> and <code class="language-plaintext highlighter-rouge">call</code>:</p>
+
+<figure class="highlight"><pre><code class="language-rust" data-lang="rust"><span class="k">if</span> <span class="k">let</span> <span class="nf">Some</span><span class="p">(</span><span class="k">true</span><span class="p">)</span> <span class="o">=</span> <span class="k">self</span><span class="nf">.cx</span><span class="p">()</span><span class="nf">.sess</span><span class="p">()</span><span class="py">.opts.debugging_opts.fast_fp_math</span> <span class="p">{</span>
+    <span class="nn">llvm</span><span class="p">::</span><span class="nf">LLVMRustSetHasUnsafeAlgebra</span><span class="p">(</span><span class="n">instr</span><span class="p">);</span>
+<span class="p">}</span></code></pre></figure>
+
+<p>And done. Just a couple of lines. If you don’t care about build time that is. The process outlined above checks the flag for each instruction we want to modify. We want to check the flag first and only <em>once</em>; then apply the modifications so we don’t negatively impact builds that don’t use the fast-math flag.</p>
+
+<h2 id="something-smarter">Something smarter</h2>
+
+<p>What the goal here boils down to is: inspecting all instructions and setting the fast-math flag as necessary. The coarsest unit of the LLVM IR is a <a href="https://llvm.org/docs/LangRef.html#module-structure">module</a> each of which consists of functions among other things we don’t care about. <a href="https://llvm.org/docs/LangRef.html#functions">Functions</a> in turn are composed of basic blocks plus other things we also don’t care about. And the instructions are in those basic blocks.</p>
+
+<p>In other words, walking from LLVM module to individual instructions in <del>pseudo</del> real code should be:</p>
+
+<figure class="highlight"><pre><code class="language-c--" data-lang="c++"><span class="k">extern</span> <span class="s">"C"</span> <span class="kt">void</span> <span class="nf">LLVMRustApplyFastMath</span><span class="p">(</span><span class="n">LLVMModuleRef</span> <span class="n">M</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for</span> <span class="p">(</span><span class="n">Function</span> <span class="o">&amp;</span><span class="n">F</span><span class="o">:</span> <span class="n">unwrap</span><span class="p">(</span><span class="n">M</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">getFunctionList</span><span class="p">())</span> <span class="p">{</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">BasicBlock</span> <span class="o">&amp;</span><span class="n">BB</span><span class="o">:</span> <span class="n">F</span><span class="p">.</span><span class="n">getBasicBlockList</span><span class="p">())</span> <span class="p">{</span>
+      <span class="k">for</span> <span class="p">(</span><span class="n">Instruction</span> <span class="o">&amp;</span><span class="n">I</span><span class="o">:</span> <span class="n">BB</span><span class="p">.</span><span class="n">getInstList</span><span class="p">())</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">isa</span><span class="o">&lt;</span><span class="n">FPMathOperator</span><span class="o">&gt;</span><span class="p">(</span><span class="n">I</span><span class="p">))</span> <span class="p">{</span>
+          <span class="n">I</span><span class="p">.</span><span class="n">setFast</span><span class="p">(</span><span class="nb">true</span><span class="p">);</span>
+        <span class="p">}</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span></code></pre></figure>
+
+<p>The only other problem is where to call this in the codegen. The constraints are that this should be called after the module is completely defined so the instructions are in their place but before the optimization passes so that the passes could make use of the fast-math flags. I chose <a href="https://github.com/JRF63/rust/blob/fastmath-flag/compiler/rustc_codegen_llvm/src/base.rs#L146">this part</a> to also be able to easily check the <code class="language-plaintext highlighter-rouge">-Z</code> flag.</p>
+
+<p>Better yet, you could just ignore all this and just checkout <a href="https://github.com/JRF63/rust/tree/fastmath-flag">this branch</a> on my fork. I even added-in the individual flags of fast-math since I was complaining about it in Part 0.</p>
+
+<h2 id="sanity-check">Sanity check</h2>
+
+<p>Directly translating the example in Part 0 from C to Rust and using the freshly minted <code class="language-plaintext highlighter-rouge">-Z</code> flag:</p>
+
+<figure class="highlight"><pre><code class="language-rust" data-lang="rust"><span class="k">fn</span> <span class="nf">summation</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="o">&amp;</span><span class="p">[</span><span class="nb">f32</span><span class="p">])</span> <span class="k">-&gt;</span> <span class="nb">f32</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="k">mut</span> <span class="n">sum</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">;</span>
+    <span class="k">for</span> <span class="n">val</span> <span class="n">in</span> <span class="n">x</span> <span class="p">{</span>
+        <span class="n">sum</span> <span class="o">+=</span> <span class="n">val</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="n">sum</span>
+<span class="p">}</span></code></pre></figure>
+
+<p>Output:</p>
+
+<div id="twocol" class="closed">
+<div id="subcol">
+
+<figure class="highlight"><pre><code class="language-llvm" data-lang="llvm"><span class="c1">; cargo +fastmath rustc --release -- -Z fp_math=fast --emit=llvm-ir</span>
+<span class="k">define</span> <span class="kt">float</span> <span class="vg">@summation</span><span class="p">([</span><span class="m">0</span> <span class="p">x</span> <span class="kt">float</span><span class="p">]*</span> <span class="k">noalias</span> <span class="k">nocapture</span> <span class="k">nonnull</span> <span class="k">readonly</span> <span class="k">align</span> <span class="m">4</span> <span class="nv">%x.0</span><span class="p">,</span> <span class="kt">i64</span> <span class="nv">%x.1</span><span class="p">)</span> <span class="k">unnamed_addr</span> <span class="vg">#0</span> <span class="k">personality</span> <span class="kt">i32</span> <span class="p">(...)*</span> <span class="vg">@__CxxFrameHandler3</span> <span class="p">{</span>
+<span class="nl">start:</span>
+  <span class="nv">%.not</span> <span class="p">=</span> <span class="k">icmp</span> <span class="k">eq</span> <span class="kt">i64</span> <span class="nv">%x.1</span><span class="p">,</span> <span class="m">0</span>
+  <span class="k">br</span> <span class="kt">i1</span> <span class="nv">%.not</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%bb5</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%bb8.preheader</span>
+
+<span class="nl">bb8.preheader:</span>                                    <span class="c1">; preds = %start</span>
+  <span class="nv">%min.iters.check</span> <span class="p">=</span> <span class="k">icmp</span> <span class="k">ult</span> <span class="kt">i64</span> <span class="nv">%x.1</span><span class="p">,</span> <span class="m">8</span>
+  <span class="k">br</span> <span class="kt">i1</span> <span class="nv">%min.iters.check</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%bb8.preheader18</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%vector.ph</span>
+
+<span class="nl">bb8.preheader18:</span>                                  <span class="c1">; preds = %middle.block, %bb8.preheader</span>
+  <span class="nv">%sum.015.ph</span> <span class="p">=</span> <span class="k">phi</span> <span class="kt">float</span> <span class="p">[</span> <span class="m">0.000000e+00</span><span class="p">,</span> <span class="nv">%bb8.preheader</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%34</span><span class="p">,</span> <span class="nv">%middle.block</span> <span class="p">]</span>
+  <span class="nv">%iter.sroa.0.014.ph</span> <span class="p">=</span> <span class="k">phi</span> <span class="kt">i64</span> <span class="p">[</span> <span class="m">0</span><span class="p">,</span> <span class="nv">%bb8.preheader</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%n.vec</span><span class="p">,</span> <span class="nv">%middle.block</span> <span class="p">]</span>
+  <span class="k">br</span> <span class="kt">label</span> <span class="nv">%bb8</span>
+
+<span class="nl">vector.ph:</span>                                        <span class="c1">; preds = %bb8.preheader</span>
+  <span class="nv">%n.vec</span> <span class="p">=</span> <span class="k">and</span> <span class="kt">i64</span> <span class="nv">%x.1</span><span class="p">,</span> <span class="m">-8</span>
+  <span class="nv">%0</span> <span class="p">=</span> <span class="k">add</span> <span class="kt">i64</span> <span class="nv">%n.vec</span><span class="p">,</span> <span class="m">-8</span>
+  <span class="nv">%1</span> <span class="p">=</span> <span class="k">lshr</span> <span class="k">exact</span> <span class="kt">i64</span> <span class="nv">%0</span><span class="p">,</span> <span class="m">3</span>
+  <span class="nv">%2</span> <span class="p">=</span> <span class="k">add</span> <span class="k">nuw</span> <span class="k">nsw</span> <span class="kt">i64</span> <span class="nv">%1</span><span class="p">,</span> <span class="m">1</span>
+  <span class="nv">%xtraiter</span> <span class="p">=</span> <span class="k">and</span> <span class="kt">i64</span> <span class="nv">%2</span><span class="p">,</span> <span class="m">3</span>
+  <span class="nv">%3</span> <span class="p">=</span> <span class="k">icmp</span> <span class="k">ult</span> <span class="kt">i64</span> <span class="nv">%0</span><span class="p">,</span> <span class="m">24</span>
+  <span class="k">br</span> <span class="kt">i1</span> <span class="nv">%3</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%middle.block.unr-lcssa</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%vector.ph.new</span>
+
+<span class="nl">vector.ph.new:</span>                                    <span class="c1">; preds = %vector.ph</span>
+  <span class="nv">%unroll_iter</span> <span class="p">=</span> <span class="k">and</span> <span class="kt">i64</span> <span class="nv">%2</span><span class="p">,</span> <span class="m">4611686018427387900</span>
+  <span class="k">br</span> <span class="kt">label</span> <span class="nv">%vector.body</span>
+
+<span class="nl">vector.body:</span>                                      <span class="c1">; preds = %vector.body, %vector.ph.new</span>
+  <span class="nv">%index</span> <span class="p">=</span> <span class="k">phi</span> <span class="kt">i64</span> <span class="p">[</span> <span class="m">0</span><span class="p">,</span> <span class="nv">%vector.ph.new</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%index.next.3</span><span class="p">,</span> <span class="nv">%vector.body</span> <span class="p">]</span>
+  <span class="nv">%vec.phi</span> <span class="p">=</span> <span class="k">phi</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="p">[</span> <span class="k">zeroinitializer</span><span class="p">,</span> <span class="nv">%vector.ph.new</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%26</span><span class="p">,</span> <span class="nv">%vector.body</span> <span class="p">]</span>
+  <span class="nv">%vec.phi16</span> <span class="p">=</span> <span class="k">phi</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="p">[</span> <span class="k">zeroinitializer</span><span class="p">,</span> <span class="nv">%vector.ph.new</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%27</span><span class="p">,</span> <span class="nv">%vector.body</span> <span class="p">]</span>
+  <span class="nv">%niter</span> <span class="p">=</span> <span class="k">phi</span> <span class="kt">i64</span> <span class="p">[</span> <span class="nv">%unroll_iter</span><span class="p">,</span> <span class="nv">%vector.ph.new</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%niter.nsub.3</span><span class="p">,</span> <span class="nv">%vector.body</span> <span class="p">]</span>
+  <span class="nv">%4</span> <span class="p">=</span> <span class="k">getelementptr</span> <span class="k">inbounds</span> <span class="p">[</span><span class="m">0</span> <span class="p">x</span> <span class="kt">float</span><span class="p">],</span> <span class="p">[</span><span class="m">0</span> <span class="p">x</span> <span class="kt">float</span><span class="p">]*</span> <span class="nv">%x.0</span><span class="p">,</span> <span class="kt">i64</span> <span class="m">0</span><span class="p">,</span> <span class="kt">i64</span> <span class="nv">%index</span>
+  <span class="nv">%5</span> <span class="p">=</span> <span class="k">bitcast</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%4</span> <span class="k">to</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span>
+  <span class="nv">%wide.load</span> <span class="p">=</span> <span class="k">load</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;,</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span> <span class="nv">%5</span><span class="p">,</span> <span class="k">align</span> <span class="m">4</span>
+  <span class="nv">%6</span> <span class="p">=</span> <span class="k">getelementptr</span> <span class="k">inbounds</span> <span class="kt">float</span><span class="p">,</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%4</span><span class="p">,</span> <span class="kt">i64</span> <span class="m">4</span>
+  <span class="nv">%7</span> <span class="p">=</span> <span class="k">bitcast</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%6</span> <span class="k">to</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span>
+  <span class="nv">%wide.load17</span> <span class="p">=</span> <span class="k">load</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;,</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span> <span class="nv">%7</span><span class="p">,</span> <span class="k">align</span> <span class="m">4</span>
+  <span class="nv">%8</span> <span class="p">=</span> <span class="k">fadd</span> <span class="k">fast</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="nv">%wide.load</span><span class="p">,</span> <span class="nv">%vec.phi</span>
+  <span class="nv">%9</span> <span class="p">=</span> <span class="k">fadd</span> <span class="k">fast</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="nv">%wide.load17</span><span class="p">,</span> <span class="nv">%vec.phi16</span>
+  <span class="nv">%index.next</span> <span class="p">=</span> <span class="k">or</span> <span class="kt">i64</span> <span class="nv">%index</span><span class="p">,</span> <span class="m">8</span>
+  <span class="nv">%10</span> <span class="p">=</span> <span class="k">getelementptr</span> <span class="k">inbounds</span> <span class="p">[</span><span class="m">0</span> <span class="p">x</span> <span class="kt">float</span><span class="p">],</span> <span class="p">[</span><span class="m">0</span> <span class="p">x</span> <span class="kt">float</span><span class="p">]*</span> <span class="nv">%x.0</span><span class="p">,</span> <span class="kt">i64</span> <span class="m">0</span><span class="p">,</span> <span class="kt">i64</span> <span class="nv">%index.next</span>
+  <span class="nv">%11</span> <span class="p">=</span> <span class="k">bitcast</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%10</span> <span class="k">to</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span>
+  <span class="nv">%wide.load.1</span> <span class="p">=</span> <span class="k">load</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;,</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span> <span class="nv">%11</span><span class="p">,</span> <span class="k">align</span> <span class="m">4</span>
+  <span class="nv">%12</span> <span class="p">=</span> <span class="k">getelementptr</span> <span class="k">inbounds</span> <span class="kt">float</span><span class="p">,</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%10</span><span class="p">,</span> <span class="kt">i64</span> <span class="m">4</span>
+  <span class="nv">%13</span> <span class="p">=</span> <span class="k">bitcast</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%12</span> <span class="k">to</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span>
+  <span class="nv">%wide.load17.1</span> <span class="p">=</span> <span class="k">load</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;,</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span> <span class="nv">%13</span><span class="p">,</span> <span class="k">align</span> <span class="m">4</span>
+  <span class="nv">%14</span> <span class="p">=</span> <span class="k">fadd</span> <span class="k">fast</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="nv">%wide.load.1</span><span class="p">,</span> <span class="nv">%8</span>
+  <span class="nv">%15</span> <span class="p">=</span> <span class="k">fadd</span> <span class="k">fast</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="nv">%wide.load17.1</span><span class="p">,</span> <span class="nv">%9</span>
+  <span class="nv">%index.next.1</span> <span class="p">=</span> <span class="k">or</span> <span class="kt">i64</span> <span class="nv">%index</span><span class="p">,</span> <span class="m">16</span>
+  <span class="nv">%16</span> <span class="p">=</span> <span class="k">getelementptr</span> <span class="k">inbounds</span> <span class="p">[</span><span class="m">0</span> <span class="p">x</span> <span class="kt">float</span><span class="p">],</span> <span class="p">[</span><span class="m">0</span> <span class="p">x</span> <span class="kt">float</span><span class="p">]*</span> <span class="nv">%x.0</span><span class="p">,</span> <span class="kt">i64</span> <span class="m">0</span><span class="p">,</span> <span class="kt">i64</span> <span class="nv">%index.next.1</span>
+  <span class="nv">%17</span> <span class="p">=</span> <span class="k">bitcast</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%16</span> <span class="k">to</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span>
+  <span class="nv">%wide.load.2</span> <span class="p">=</span> <span class="k">load</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;,</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span> <span class="nv">%17</span><span class="p">,</span> <span class="k">align</span> <span class="m">4</span>
+  <span class="nv">%18</span> <span class="p">=</span> <span class="k">getelementptr</span> <span class="k">inbounds</span> <span class="kt">float</span><span class="p">,</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%16</span><span class="p">,</span> <span class="kt">i64</span> <span class="m">4</span>
+  <span class="nv">%19</span> <span class="p">=</span> <span class="k">bitcast</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%18</span> <span class="k">to</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span>
+  <span class="nv">%wide.load17.2</span> <span class="p">=</span> <span class="k">load</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;,</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span> <span class="nv">%19</span><span class="p">,</span> <span class="k">align</span> <span class="m">4</span>
+  <span class="nv">%20</span> <span class="p">=</span> <span class="k">fadd</span> <span class="k">fast</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="nv">%wide.load.2</span><span class="p">,</span> <span class="nv">%14</span>
+  <span class="nv">%21</span> <span class="p">=</span> <span class="k">fadd</span> <span class="k">fast</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="nv">%wide.load17.2</span><span class="p">,</span> <span class="nv">%15</span>
+  <span class="nv">%index.next.2</span> <span class="p">=</span> <span class="k">or</span> <span class="kt">i64</span> <span class="nv">%index</span><span class="p">,</span> <span class="m">24</span>
+  <span class="nv">%22</span> <span class="p">=</span> <span class="k">getelementptr</span> <span class="k">inbounds</span> <span class="p">[</span><span class="m">0</span> <span class="p">x</span> <span class="kt">float</span><span class="p">],</span> <span class="p">[</span><span class="m">0</span> <span class="p">x</span> <span class="kt">float</span><span class="p">]*</span> <span class="nv">%x.0</span><span class="p">,</span> <span class="kt">i64</span> <span class="m">0</span><span class="p">,</span> <span class="kt">i64</span> <span class="nv">%index.next.2</span>
+  <span class="nv">%23</span> <span class="p">=</span> <span class="k">bitcast</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%22</span> <span class="k">to</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span>
+  <span class="nv">%wide.load.3</span> <span class="p">=</span> <span class="k">load</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;,</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span> <span class="nv">%23</span><span class="p">,</span> <span class="k">align</span> <span class="m">4</span>
+  <span class="nv">%24</span> <span class="p">=</span> <span class="k">getelementptr</span> <span class="k">inbounds</span> <span class="kt">float</span><span class="p">,</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%22</span><span class="p">,</span> <span class="kt">i64</span> <span class="m">4</span>
+  <span class="nv">%25</span> <span class="p">=</span> <span class="k">bitcast</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%24</span> <span class="k">to</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span>
+  <span class="nv">%wide.load17.3</span> <span class="p">=</span> <span class="k">load</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;,</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span> <span class="nv">%25</span><span class="p">,</span> <span class="k">align</span> <span class="m">4</span>
+  <span class="nv">%26</span> <span class="p">=</span> <span class="k">fadd</span> <span class="k">fast</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="nv">%wide.load.3</span><span class="p">,</span> <span class="nv">%20</span>
+  <span class="nv">%27</span> <span class="p">=</span> <span class="k">fadd</span> <span class="k">fast</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="nv">%wide.load17.3</span><span class="p">,</span> <span class="nv">%21</span>
+  <span class="nv">%index.next.3</span> <span class="p">=</span> <span class="k">add</span> <span class="kt">i64</span> <span class="nv">%index</span><span class="p">,</span> <span class="m">32</span>
+  <span class="nv">%niter.nsub.3</span> <span class="p">=</span> <span class="k">add</span> <span class="kt">i64</span> <span class="nv">%niter</span><span class="p">,</span> <span class="m">-4</span>
+  <span class="nv">%niter.ncmp.3</span> <span class="p">=</span> <span class="k">icmp</span> <span class="k">eq</span> <span class="kt">i64</span> <span class="nv">%niter.nsub.3</span><span class="p">,</span> <span class="m">0</span>
+  <span class="k">br</span> <span class="kt">i1</span> <span class="nv">%niter.ncmp.3</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%middle.block.unr-lcssa</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%vector.body</span><span class="p">,</span> <span class="nv">!llvm.loop</span> <span class="nv">!11</span>
+
+<span class="nl">middle.block.unr-lcssa:</span>                           <span class="c1">; preds = %vector.body, %vector.ph</span>
+  <span class="nv">%.lcssa20.ph</span> <span class="p">=</span> <span class="k">phi</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="p">[</span> <span class="k">undef</span><span class="p">,</span> <span class="nv">%vector.ph</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%26</span><span class="p">,</span> <span class="nv">%vector.body</span> <span class="p">]</span>
+  <span class="nv">%.lcssa19.ph</span> <span class="p">=</span> <span class="k">phi</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="p">[</span> <span class="k">undef</span><span class="p">,</span> <span class="nv">%vector.ph</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%27</span><span class="p">,</span> <span class="nv">%vector.body</span> <span class="p">]</span>
+  <span class="nv">%index.unr</span> <span class="p">=</span> <span class="k">phi</span> <span class="kt">i64</span> <span class="p">[</span> <span class="m">0</span><span class="p">,</span> <span class="nv">%vector.ph</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%index.next.3</span><span class="p">,</span> <span class="nv">%vector.body</span> <span class="p">]</span>
+  <span class="nv">%vec.phi.unr</span> <span class="p">=</span> <span class="k">phi</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="p">[</span> <span class="k">zeroinitializer</span><span class="p">,</span> <span class="nv">%vector.ph</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%26</span><span class="p">,</span> <span class="nv">%vector.body</span> <span class="p">]</span>
+  <span class="nv">%vec.phi16.unr</span> <span class="p">=</span> <span class="k">phi</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="p">[</span> <span class="k">zeroinitializer</span><span class="p">,</span> <span class="nv">%vector.ph</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%27</span><span class="p">,</span> <span class="nv">%vector.body</span> <span class="p">]</span>
+  <span class="nv">%lcmp.mod.not</span> <span class="p">=</span> <span class="k">icmp</span> <span class="k">eq</span> <span class="kt">i64</span> <span class="nv">%xtraiter</span><span class="p">,</span> <span class="m">0</span>
+  <span class="k">br</span> <span class="kt">i1</span> <span class="nv">%lcmp.mod.not</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%middle.block</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%vector.body.epil</span>
+
+<span class="nl">vector.body.epil:</span>                                 <span class="c1">; preds = %middle.block.unr-lcssa, %vector.body.epil</span>
+  <span class="nv">%index.epil</span> <span class="p">=</span> <span class="k">phi</span> <span class="kt">i64</span> <span class="p">[</span> <span class="nv">%index.next.epil</span><span class="p">,</span> <span class="nv">%vector.body.epil</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%index.unr</span><span class="p">,</span> <span class="nv">%middle.block.unr-lcssa</span> <span class="p">]</span>
+  <span class="nv">%vec.phi.epil</span> <span class="p">=</span> <span class="k">phi</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="p">[</span> <span class="nv">%32</span><span class="p">,</span> <span class="nv">%vector.body.epil</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%vec.phi.unr</span><span class="p">,</span> <span class="nv">%middle.block.unr-lcssa</span> <span class="p">]</span>
+  <span class="nv">%vec.phi16.epil</span> <span class="p">=</span> <span class="k">phi</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="p">[</span> <span class="nv">%33</span><span class="p">,</span> <span class="nv">%vector.body.epil</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%vec.phi16.unr</span><span class="p">,</span> <span class="nv">%middle.block.unr-lcssa</span> <span class="p">]</span>
+  <span class="nv">%epil.iter</span> <span class="p">=</span> <span class="k">phi</span> <span class="kt">i64</span> <span class="p">[</span> <span class="nv">%epil.iter.sub</span><span class="p">,</span> <span class="nv">%vector.body.epil</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%xtraiter</span><span class="p">,</span> <span class="nv">%middle.block.unr-lcssa</span> <span class="p">]</span>
+  <span class="nv">%28</span> <span class="p">=</span> <span class="k">getelementptr</span> <span class="k">inbounds</span> <span class="p">[</span><span class="m">0</span> <span class="p">x</span> <span class="kt">float</span><span class="p">],</span> <span class="p">[</span><span class="m">0</span> <span class="p">x</span> <span class="kt">float</span><span class="p">]*</span> <span class="nv">%x.0</span><span class="p">,</span> <span class="kt">i64</span> <span class="m">0</span><span class="p">,</span> <span class="kt">i64</span> <span class="nv">%index.epil</span>
+  <span class="nv">%29</span> <span class="p">=</span> <span class="k">bitcast</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%28</span> <span class="k">to</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span>
+  <span class="nv">%wide.load.epil</span> <span class="p">=</span> <span class="k">load</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;,</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span> <span class="nv">%29</span><span class="p">,</span> <span class="k">align</span> <span class="m">4</span>
+  <span class="nv">%30</span> <span class="p">=</span> <span class="k">getelementptr</span> <span class="k">inbounds</span> <span class="kt">float</span><span class="p">,</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%28</span><span class="p">,</span> <span class="kt">i64</span> <span class="m">4</span>
+  <span class="nv">%31</span> <span class="p">=</span> <span class="k">bitcast</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%30</span> <span class="k">to</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span>
+  <span class="nv">%wide.load17.epil</span> <span class="p">=</span> <span class="k">load</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;,</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span> <span class="nv">%31</span><span class="p">,</span> <span class="k">align</span> <span class="m">4</span>
+  <span class="nv">%32</span> <span class="p">=</span> <span class="k">fadd</span> <span class="k">fast</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="nv">%wide.load.epil</span><span class="p">,</span> <span class="nv">%vec.phi.epil</span>
+  <span class="nv">%33</span> <span class="p">=</span> <span class="k">fadd</span> <span class="k">fast</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="nv">%wide.load17.epil</span><span class="p">,</span> <span class="nv">%vec.phi16.epil</span>
+  <span class="nv">%index.next.epil</span> <span class="p">=</span> <span class="k">add</span> <span class="kt">i64</span> <span class="nv">%index.epil</span><span class="p">,</span> <span class="m">8</span>
+  <span class="nv">%epil.iter.sub</span> <span class="p">=</span> <span class="k">add</span> <span class="kt">i64</span> <span class="nv">%epil.iter</span><span class="p">,</span> <span class="m">-1</span>
+  <span class="nv">%epil.iter.cmp.not</span> <span class="p">=</span> <span class="k">icmp</span> <span class="k">eq</span> <span class="kt">i64</span> <span class="nv">%epil.iter.sub</span><span class="p">,</span> <span class="m">0</span>
+  <span class="k">br</span> <span class="kt">i1</span> <span class="nv">%epil.iter.cmp.not</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%middle.block</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%vector.body.epil</span><span class="p">,</span> <span class="nv">!llvm.loop</span> <span class="nv">!12</span>
+
+<span class="nl">middle.block:</span>                                     <span class="c1">; preds = %vector.body.epil, %middle.block.unr-lcssa</span>
+  <span class="nv">%.lcssa20</span> <span class="p">=</span> <span class="k">phi</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="p">[</span> <span class="nv">%.lcssa20.ph</span><span class="p">,</span> <span class="nv">%middle.block.unr-lcssa</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%32</span><span class="p">,</span> <span class="nv">%vector.body.epil</span> <span class="p">]</span>
+  <span class="nv">%.lcssa19</span> <span class="p">=</span> <span class="k">phi</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="p">[</span> <span class="nv">%.lcssa19.ph</span><span class="p">,</span> <span class="nv">%middle.block.unr-lcssa</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%33</span><span class="p">,</span> <span class="nv">%vector.body.epil</span> <span class="p">]</span>
+  <span class="nv">%bin.rdx</span> <span class="p">=</span> <span class="k">fadd</span> <span class="k">fast</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="nv">%.lcssa19</span><span class="p">,</span> <span class="nv">%.lcssa20</span>
+  <span class="nv">%34</span> <span class="p">=</span> <span class="k">call</span> <span class="k">fast</span> <span class="kt">float</span> <span class="vg">@llvm.experimental.vector.reduce.v2.fadd.f32.v4f32</span><span class="p">(</span><span class="kt">float</span> <span class="m">0.000000e+00</span><span class="p">,</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="nv">%bin.rdx</span><span class="p">)</span>
+  <span class="nv">%cmp.n</span> <span class="p">=</span> <span class="k">icmp</span> <span class="k">eq</span> <span class="kt">i64</span> <span class="nv">%n.vec</span><span class="p">,</span> <span class="nv">%x.1</span>
+  <span class="k">br</span> <span class="kt">i1</span> <span class="nv">%cmp.n</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%bb5</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%bb8.preheader18</span>
+
+<span class="nl">bb5:</span>                                              <span class="c1">; preds = %bb8, %middle.block, %start</span>
+  <span class="nv">%sum.0.lcssa</span> <span class="p">=</span> <span class="k">phi</span> <span class="kt">float</span> <span class="p">[</span> <span class="m">0.000000e+00</span><span class="p">,</span> <span class="nv">%start</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%34</span><span class="p">,</span> <span class="nv">%middle.block</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%37</span><span class="p">,</span> <span class="nv">%bb8</span> <span class="p">]</span>
+  <span class="k">ret</span> <span class="kt">float</span> <span class="nv">%sum.0.lcssa</span>
+
+<span class="nl">bb8:</span>                                              <span class="c1">; preds = %bb8.preheader18, %bb8</span>
+  <span class="nv">%sum.015</span> <span class="p">=</span> <span class="k">phi</span> <span class="kt">float</span> <span class="p">[</span> <span class="nv">%37</span><span class="p">,</span> <span class="nv">%bb8</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%sum.015.ph</span><span class="p">,</span> <span class="nv">%bb8.preheader18</span> <span class="p">]</span>
+  <span class="nv">%iter.sroa.0.014</span> <span class="p">=</span> <span class="k">phi</span> <span class="kt">i64</span> <span class="p">[</span> <span class="nv">%35</span><span class="p">,</span> <span class="nv">%bb8</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%iter.sroa.0.014.ph</span><span class="p">,</span> <span class="nv">%bb8.preheader18</span> <span class="p">]</span>
+  <span class="nv">%35</span> <span class="p">=</span> <span class="k">add</span> <span class="k">nuw</span> <span class="kt">i64</span> <span class="nv">%iter.sroa.0.014</span><span class="p">,</span> <span class="m">1</span>
+  <span class="nv">%36</span> <span class="p">=</span> <span class="k">getelementptr</span> <span class="k">inbounds</span> <span class="p">[</span><span class="m">0</span> <span class="p">x</span> <span class="kt">float</span><span class="p">],</span> <span class="p">[</span><span class="m">0</span> <span class="p">x</span> <span class="kt">float</span><span class="p">]*</span> <span class="nv">%x.0</span><span class="p">,</span> <span class="kt">i64</span> <span class="m">0</span><span class="p">,</span> <span class="kt">i64</span> <span class="nv">%iter.sroa.0.014</span>
+  <span class="nv">%_15</span> <span class="p">=</span> <span class="k">load</span> <span class="kt">float</span><span class="p">,</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%36</span><span class="p">,</span> <span class="k">align</span> <span class="m">4</span>
+  <span class="nv">%37</span> <span class="p">=</span> <span class="k">fadd</span> <span class="k">fast</span> <span class="kt">float</span> <span class="nv">%_15</span><span class="p">,</span> <span class="nv">%sum.015</span>
+  <span class="nv">%exitcond.not</span> <span class="p">=</span> <span class="k">icmp</span> <span class="k">eq</span> <span class="kt">i64</span> <span class="nv">%35</span><span class="p">,</span> <span class="nv">%x.1</span>
+  <span class="k">br</span> <span class="kt">i1</span> <span class="nv">%exitcond.not</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%bb5</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%bb8</span><span class="p">,</span> <span class="nv">!llvm.loop</span> <span class="nv">!14</span>
+<span class="p">}</span></code></pre></figure>
+
+</div>
+<div id="divider"></div>
+<div id="subcol">
+
+<figure class="highlight"><pre><code class="language-llvm" data-lang="llvm"><span class="c1">; clang src\main.c -O3 -ffast-math -S -emit-llvm -o target\release\deps\summation.ll</span>
+<span class="k">define</span> <span class="k">dso_local</span> <span class="kt">float</span> <span class="vg">@summation</span><span class="p">(</span><span class="kt">float</span><span class="p">*</span> <span class="k">nocapture</span> <span class="k">readonly</span> <span class="nv">%0</span><span class="p">,</span> <span class="kt">i64</span> <span class="nv">%1</span><span class="p">)</span> <span class="k">local_unnamed_addr</span> <span class="vg">#0</span> <span class="p">{</span>
+<span class="c1">; 2:</span>
+  <span class="nv">%3</span> <span class="p">=</span> <span class="k">icmp</span> <span class="k">eq</span> <span class="kt">i64</span> <span class="nv">%1</span><span class="p">,</span> <span class="m">0</span>
+  <span class="k">br</span> <span class="kt">i1</span> <span class="nv">%3</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%90</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%4</span>
+
+<span class="m">4</span><span class="err">:</span>                                                <span class="c1">; preds = %2</span>
+  <span class="nv">%5</span> <span class="p">=</span> <span class="k">icmp</span> <span class="k">ult</span> <span class="kt">i64</span> <span class="nv">%1</span><span class="p">,</span> <span class="m">8</span>
+  <span class="k">br</span> <span class="kt">i1</span> <span class="nv">%5</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%6</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%9</span>
+
+<span class="m">6</span><span class="err">:</span>                                                <span class="c1">; preds = %84, %4</span>
+  <span class="nv">%7</span> <span class="p">=</span> <span class="k">phi</span> <span class="kt">i64</span> <span class="p">[</span> <span class="m">0</span><span class="p">,</span> <span class="nv">%4</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%10</span><span class="p">,</span> <span class="nv">%84</span> <span class="p">]</span>
+  <span class="nv">%8</span> <span class="p">=</span> <span class="k">phi</span> <span class="kt">float</span> <span class="p">[</span> <span class="m">0.000000e+00</span><span class="p">,</span> <span class="nv">%4</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%88</span><span class="p">,</span> <span class="nv">%84</span> <span class="p">]</span>
+  <span class="k">br</span> <span class="kt">label</span> <span class="nv">%92</span>
+
+<span class="m">9</span><span class="err">:</span>                                                <span class="c1">; preds = %4</span>
+  <span class="nv">%10</span> <span class="p">=</span> <span class="k">and</span> <span class="kt">i64</span> <span class="nv">%1</span><span class="p">,</span> <span class="m">-8</span>
+  <span class="nv">%11</span> <span class="p">=</span> <span class="k">add</span> <span class="kt">i64</span> <span class="nv">%10</span><span class="p">,</span> <span class="m">-8</span>
+  <span class="nv">%12</span> <span class="p">=</span> <span class="k">lshr</span> <span class="k">exact</span> <span class="kt">i64</span> <span class="nv">%11</span><span class="p">,</span> <span class="m">3</span>
+  <span class="nv">%13</span> <span class="p">=</span> <span class="k">add</span> <span class="k">nuw</span> <span class="k">nsw</span> <span class="kt">i64</span> <span class="nv">%12</span><span class="p">,</span> <span class="m">1</span>
+  <span class="nv">%14</span> <span class="p">=</span> <span class="k">and</span> <span class="kt">i64</span> <span class="nv">%13</span><span class="p">,</span> <span class="m">3</span>
+  <span class="nv">%15</span> <span class="p">=</span> <span class="k">icmp</span> <span class="k">ult</span> <span class="kt">i64</span> <span class="nv">%11</span><span class="p">,</span> <span class="m">24</span>
+  <span class="k">br</span> <span class="kt">i1</span> <span class="nv">%15</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%61</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%16</span>
+
+<span class="m">16</span><span class="err">:</span>                                               <span class="c1">; preds = %9</span>
+  <span class="nv">%17</span> <span class="p">=</span> <span class="k">and</span> <span class="kt">i64</span> <span class="nv">%13</span><span class="p">,</span> <span class="m">4611686018427387900</span>
+  <span class="k">br</span> <span class="kt">label</span> <span class="nv">%18</span>
+
+<span class="m">18</span><span class="err">:</span>                                               <span class="c1">; preds = %18, %16</span>
+  <span class="nv">%19</span> <span class="p">=</span> <span class="k">phi</span> <span class="kt">i64</span> <span class="p">[</span> <span class="m">0</span><span class="p">,</span> <span class="nv">%16</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%58</span><span class="p">,</span> <span class="nv">%18</span> <span class="p">]</span>
+  <span class="nv">%20</span> <span class="p">=</span> <span class="k">phi</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="p">[</span> <span class="k">zeroinitializer</span><span class="p">,</span> <span class="nv">%16</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%56</span><span class="p">,</span> <span class="nv">%18</span> <span class="p">]</span>
+  <span class="nv">%21</span> <span class="p">=</span> <span class="k">phi</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="p">[</span> <span class="k">zeroinitializer</span><span class="p">,</span> <span class="nv">%16</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%57</span><span class="p">,</span> <span class="nv">%18</span> <span class="p">]</span>
+  <span class="nv">%22</span> <span class="p">=</span> <span class="k">phi</span> <span class="kt">i64</span> <span class="p">[</span> <span class="nv">%17</span><span class="p">,</span> <span class="nv">%16</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%59</span><span class="p">,</span> <span class="nv">%18</span> <span class="p">]</span>
+  <span class="nv">%23</span> <span class="p">=</span> <span class="k">getelementptr</span> <span class="k">inbounds</span> <span class="kt">float</span><span class="p">,</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%0</span><span class="p">,</span> <span class="kt">i64</span> <span class="nv">%19</span>
+  <span class="nv">%24</span> <span class="p">=</span> <span class="k">bitcast</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%23</span> <span class="k">to</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span>
+  <span class="nv">%25</span> <span class="p">=</span> <span class="k">load</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;,</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span> <span class="nv">%24</span><span class="p">,</span> <span class="k">align</span> <span class="m">4</span><span class="p">,</span> <span class="nv">!tbaa</span> <span class="nv">!3</span>
+  <span class="nv">%26</span> <span class="p">=</span> <span class="k">getelementptr</span> <span class="k">inbounds</span> <span class="kt">float</span><span class="p">,</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%23</span><span class="p">,</span> <span class="kt">i64</span> <span class="m">4</span>
+  <span class="nv">%27</span> <span class="p">=</span> <span class="k">bitcast</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%26</span> <span class="k">to</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span>
+  <span class="nv">%28</span> <span class="p">=</span> <span class="k">load</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;,</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span> <span class="nv">%27</span><span class="p">,</span> <span class="k">align</span> <span class="m">4</span><span class="p">,</span> <span class="nv">!tbaa</span> <span class="nv">!3</span>
+  <span class="nv">%29</span> <span class="p">=</span> <span class="k">fadd</span> <span class="k">fast</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="nv">%25</span><span class="p">,</span> <span class="nv">%20</span>
+  <span class="nv">%30</span> <span class="p">=</span> <span class="k">fadd</span> <span class="k">fast</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="nv">%28</span><span class="p">,</span> <span class="nv">%21</span>
+  <span class="nv">%31</span> <span class="p">=</span> <span class="k">or</span> <span class="kt">i64</span> <span class="nv">%19</span><span class="p">,</span> <span class="m">8</span>
+  <span class="nv">%32</span> <span class="p">=</span> <span class="k">getelementptr</span> <span class="k">inbounds</span> <span class="kt">float</span><span class="p">,</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%0</span><span class="p">,</span> <span class="kt">i64</span> <span class="nv">%31</span>
+  <span class="nv">%33</span> <span class="p">=</span> <span class="k">bitcast</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%32</span> <span class="k">to</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span>
+  <span class="nv">%34</span> <span class="p">=</span> <span class="k">load</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;,</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span> <span class="nv">%33</span><span class="p">,</span> <span class="k">align</span> <span class="m">4</span><span class="p">,</span> <span class="nv">!tbaa</span> <span class="nv">!3</span>
+  <span class="nv">%35</span> <span class="p">=</span> <span class="k">getelementptr</span> <span class="k">inbounds</span> <span class="kt">float</span><span class="p">,</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%32</span><span class="p">,</span> <span class="kt">i64</span> <span class="m">4</span>
+  <span class="nv">%36</span> <span class="p">=</span> <span class="k">bitcast</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%35</span> <span class="k">to</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span>
+  <span class="nv">%37</span> <span class="p">=</span> <span class="k">load</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;,</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span> <span class="nv">%36</span><span class="p">,</span> <span class="k">align</span> <span class="m">4</span><span class="p">,</span> <span class="nv">!tbaa</span> <span class="nv">!3</span>
+  <span class="nv">%38</span> <span class="p">=</span> <span class="k">fadd</span> <span class="k">fast</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="nv">%34</span><span class="p">,</span> <span class="nv">%29</span>
+  <span class="nv">%39</span> <span class="p">=</span> <span class="k">fadd</span> <span class="k">fast</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="nv">%37</span><span class="p">,</span> <span class="nv">%30</span>
+  <span class="nv">%40</span> <span class="p">=</span> <span class="k">or</span> <span class="kt">i64</span> <span class="nv">%19</span><span class="p">,</span> <span class="m">16</span>
+  <span class="nv">%41</span> <span class="p">=</span> <span class="k">getelementptr</span> <span class="k">inbounds</span> <span class="kt">float</span><span class="p">,</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%0</span><span class="p">,</span> <span class="kt">i64</span> <span class="nv">%40</span>
+  <span class="nv">%42</span> <span class="p">=</span> <span class="k">bitcast</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%41</span> <span class="k">to</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span>
+  <span class="nv">%43</span> <span class="p">=</span> <span class="k">load</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;,</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span> <span class="nv">%42</span><span class="p">,</span> <span class="k">align</span> <span class="m">4</span><span class="p">,</span> <span class="nv">!tbaa</span> <span class="nv">!3</span>
+  <span class="nv">%44</span> <span class="p">=</span> <span class="k">getelementptr</span> <span class="k">inbounds</span> <span class="kt">float</span><span class="p">,</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%41</span><span class="p">,</span> <span class="kt">i64</span> <span class="m">4</span>
+  <span class="nv">%45</span> <span class="p">=</span> <span class="k">bitcast</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%44</span> <span class="k">to</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span>
+  <span class="nv">%46</span> <span class="p">=</span> <span class="k">load</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;,</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span> <span class="nv">%45</span><span class="p">,</span> <span class="k">align</span> <span class="m">4</span><span class="p">,</span> <span class="nv">!tbaa</span> <span class="nv">!3</span>
+  <span class="nv">%47</span> <span class="p">=</span> <span class="k">fadd</span> <span class="k">fast</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="nv">%43</span><span class="p">,</span> <span class="nv">%38</span>
+  <span class="nv">%48</span> <span class="p">=</span> <span class="k">fadd</span> <span class="k">fast</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="nv">%46</span><span class="p">,</span> <span class="nv">%39</span>
+  <span class="nv">%49</span> <span class="p">=</span> <span class="k">or</span> <span class="kt">i64</span> <span class="nv">%19</span><span class="p">,</span> <span class="m">24</span>
+  <span class="nv">%50</span> <span class="p">=</span> <span class="k">getelementptr</span> <span class="k">inbounds</span> <span class="kt">float</span><span class="p">,</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%0</span><span class="p">,</span> <span class="kt">i64</span> <span class="nv">%49</span>
+  <span class="nv">%51</span> <span class="p">=</span> <span class="k">bitcast</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%50</span> <span class="k">to</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span>
+  <span class="nv">%52</span> <span class="p">=</span> <span class="k">load</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;,</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span> <span class="nv">%51</span><span class="p">,</span> <span class="k">align</span> <span class="m">4</span><span class="p">,</span> <span class="nv">!tbaa</span> <span class="nv">!3</span>
+  <span class="nv">%53</span> <span class="p">=</span> <span class="k">getelementptr</span> <span class="k">inbounds</span> <span class="kt">float</span><span class="p">,</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%50</span><span class="p">,</span> <span class="kt">i64</span> <span class="m">4</span>
+  <span class="nv">%54</span> <span class="p">=</span> <span class="k">bitcast</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%53</span> <span class="k">to</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span>
+  <span class="nv">%55</span> <span class="p">=</span> <span class="k">load</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;,</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span> <span class="nv">%54</span><span class="p">,</span> <span class="k">align</span> <span class="m">4</span><span class="p">,</span> <span class="nv">!tbaa</span> <span class="nv">!3</span>
+  <span class="nv">%56</span> <span class="p">=</span> <span class="k">fadd</span> <span class="k">fast</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="nv">%52</span><span class="p">,</span> <span class="nv">%47</span>
+  <span class="nv">%57</span> <span class="p">=</span> <span class="k">fadd</span> <span class="k">fast</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="nv">%55</span><span class="p">,</span> <span class="nv">%48</span>
+  <span class="nv">%58</span> <span class="p">=</span> <span class="k">add</span> <span class="kt">i64</span> <span class="nv">%19</span><span class="p">,</span> <span class="m">32</span>
+  <span class="nv">%59</span> <span class="p">=</span> <span class="k">add</span> <span class="kt">i64</span> <span class="nv">%22</span><span class="p">,</span> <span class="m">-4</span>
+  <span class="nv">%60</span> <span class="p">=</span> <span class="k">icmp</span> <span class="k">eq</span> <span class="kt">i64</span> <span class="nv">%59</span><span class="p">,</span> <span class="m">0</span>
+  <span class="k">br</span> <span class="kt">i1</span> <span class="nv">%60</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%61</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%18</span><span class="p">,</span> <span class="nv">!llvm.loop</span> <span class="nv">!7</span>
+
+<span class="m">61</span><span class="err">:</span>                                               <span class="c1">; preds = %18, %9</span>
+  <span class="nv">%62</span> <span class="p">=</span> <span class="k">phi</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="p">[</span> <span class="k">undef</span><span class="p">,</span> <span class="nv">%9</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%56</span><span class="p">,</span> <span class="nv">%18</span> <span class="p">]</span>
+  <span class="nv">%63</span> <span class="p">=</span> <span class="k">phi</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="p">[</span> <span class="k">undef</span><span class="p">,</span> <span class="nv">%9</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%57</span><span class="p">,</span> <span class="nv">%18</span> <span class="p">]</span>
+  <span class="nv">%64</span> <span class="p">=</span> <span class="k">phi</span> <span class="kt">i64</span> <span class="p">[</span> <span class="m">0</span><span class="p">,</span> <span class="nv">%9</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%58</span><span class="p">,</span> <span class="nv">%18</span> <span class="p">]</span>
+  <span class="nv">%65</span> <span class="p">=</span> <span class="k">phi</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="p">[</span> <span class="k">zeroinitializer</span><span class="p">,</span> <span class="nv">%9</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%56</span><span class="p">,</span> <span class="nv">%18</span> <span class="p">]</span>
+  <span class="nv">%66</span> <span class="p">=</span> <span class="k">phi</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="p">[</span> <span class="k">zeroinitializer</span><span class="p">,</span> <span class="nv">%9</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%57</span><span class="p">,</span> <span class="nv">%18</span> <span class="p">]</span>
+  <span class="nv">%67</span> <span class="p">=</span> <span class="k">icmp</span> <span class="k">eq</span> <span class="kt">i64</span> <span class="nv">%14</span><span class="p">,</span> <span class="m">0</span>
+  <span class="k">br</span> <span class="kt">i1</span> <span class="nv">%67</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%84</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%68</span>
+
+<span class="m">68</span><span class="err">:</span>                                               <span class="c1">; preds = %61, %68</span>
+  <span class="nv">%69</span> <span class="p">=</span> <span class="k">phi</span> <span class="kt">i64</span> <span class="p">[</span> <span class="nv">%81</span><span class="p">,</span> <span class="nv">%68</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%64</span><span class="p">,</span> <span class="nv">%61</span> <span class="p">]</span>
+  <span class="nv">%70</span> <span class="p">=</span> <span class="k">phi</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="p">[</span> <span class="nv">%79</span><span class="p">,</span> <span class="nv">%68</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%65</span><span class="p">,</span> <span class="nv">%61</span> <span class="p">]</span>
+  <span class="nv">%71</span> <span class="p">=</span> <span class="k">phi</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="p">[</span> <span class="nv">%80</span><span class="p">,</span> <span class="nv">%68</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%66</span><span class="p">,</span> <span class="nv">%61</span> <span class="p">]</span>
+  <span class="nv">%72</span> <span class="p">=</span> <span class="k">phi</span> <span class="kt">i64</span> <span class="p">[</span> <span class="nv">%82</span><span class="p">,</span> <span class="nv">%68</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%14</span><span class="p">,</span> <span class="nv">%61</span> <span class="p">]</span>
+  <span class="nv">%73</span> <span class="p">=</span> <span class="k">getelementptr</span> <span class="k">inbounds</span> <span class="kt">float</span><span class="p">,</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%0</span><span class="p">,</span> <span class="kt">i64</span> <span class="nv">%69</span>
+  <span class="nv">%74</span> <span class="p">=</span> <span class="k">bitcast</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%73</span> <span class="k">to</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span>
+  <span class="nv">%75</span> <span class="p">=</span> <span class="k">load</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;,</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span> <span class="nv">%74</span><span class="p">,</span> <span class="k">align</span> <span class="m">4</span><span class="p">,</span> <span class="nv">!tbaa</span> <span class="nv">!3</span>
+  <span class="nv">%76</span> <span class="p">=</span> <span class="k">getelementptr</span> <span class="k">inbounds</span> <span class="kt">float</span><span class="p">,</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%73</span><span class="p">,</span> <span class="kt">i64</span> <span class="m">4</span>
+  <span class="nv">%77</span> <span class="p">=</span> <span class="k">bitcast</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%76</span> <span class="k">to</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span>
+  <span class="nv">%78</span> <span class="p">=</span> <span class="k">load</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;,</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;*</span> <span class="nv">%77</span><span class="p">,</span> <span class="k">align</span> <span class="m">4</span><span class="p">,</span> <span class="nv">!tbaa</span> <span class="nv">!3</span>
+  <span class="nv">%79</span> <span class="p">=</span> <span class="k">fadd</span> <span class="k">fast</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="nv">%75</span><span class="p">,</span> <span class="nv">%70</span>
+  <span class="nv">%80</span> <span class="p">=</span> <span class="k">fadd</span> <span class="k">fast</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="nv">%78</span><span class="p">,</span> <span class="nv">%71</span>
+  <span class="nv">%81</span> <span class="p">=</span> <span class="k">add</span> <span class="kt">i64</span> <span class="nv">%69</span><span class="p">,</span> <span class="m">8</span>
+  <span class="nv">%82</span> <span class="p">=</span> <span class="k">add</span> <span class="kt">i64</span> <span class="nv">%72</span><span class="p">,</span> <span class="m">-1</span>
+  <span class="nv">%83</span> <span class="p">=</span> <span class="k">icmp</span> <span class="k">eq</span> <span class="kt">i64</span> <span class="nv">%82</span><span class="p">,</span> <span class="m">0</span>
+  <span class="k">br</span> <span class="kt">i1</span> <span class="nv">%83</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%84</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%68</span><span class="p">,</span> <span class="nv">!llvm.loop</span> <span class="nv">!9</span>
+
+<span class="m">84</span><span class="err">:</span>                                               <span class="c1">; preds = %68, %61</span>
+  <span class="nv">%85</span> <span class="p">=</span> <span class="k">phi</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="p">[</span> <span class="nv">%62</span><span class="p">,</span> <span class="nv">%61</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%79</span><span class="p">,</span> <span class="nv">%68</span> <span class="p">]</span>
+  <span class="nv">%86</span> <span class="p">=</span> <span class="k">phi</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="p">[</span> <span class="nv">%63</span><span class="p">,</span> <span class="nv">%61</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%80</span><span class="p">,</span> <span class="nv">%68</span> <span class="p">]</span>
+  <span class="nv">%87</span> <span class="p">=</span> <span class="k">fadd</span> <span class="k">fast</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="nv">%86</span><span class="p">,</span> <span class="nv">%85</span>
+  <span class="nv">%88</span> <span class="p">=</span> <span class="k">call</span> <span class="k">fast</span> <span class="kt">float</span> <span class="vg">@llvm.experimental.vector.reduce.v2.fadd.f32.v4f32</span><span class="p">(</span><span class="kt">float</span> <span class="m">0.000000e+00</span><span class="p">,</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span> <span class="nv">%87</span><span class="p">)</span>
+  <span class="nv">%89</span> <span class="p">=</span> <span class="k">icmp</span> <span class="k">eq</span> <span class="kt">i64</span> <span class="nv">%10</span><span class="p">,</span> <span class="nv">%1</span>
+  <span class="k">br</span> <span class="kt">i1</span> <span class="nv">%89</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%90</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%6</span>
+
+<span class="m">90</span><span class="err">:</span>                                               <span class="c1">; preds = %92, %84, %2</span>
+  <span class="nv">%91</span> <span class="p">=</span> <span class="k">phi</span> <span class="kt">float</span> <span class="p">[</span> <span class="m">0.000000e+00</span><span class="p">,</span> <span class="nv">%2</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%88</span><span class="p">,</span> <span class="nv">%84</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%97</span><span class="p">,</span> <span class="nv">%92</span> <span class="p">]</span>
+  <span class="k">ret</span> <span class="kt">float</span> <span class="nv">%91</span>
+
+<span class="m">92</span><span class="err">:</span>                                               <span class="c1">; preds = %6, %92</span>
+  <span class="nv">%93</span> <span class="p">=</span> <span class="k">phi</span> <span class="kt">i64</span> <span class="p">[</span> <span class="nv">%98</span><span class="p">,</span> <span class="nv">%92</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%7</span><span class="p">,</span> <span class="nv">%6</span> <span class="p">]</span>
+  <span class="nv">%94</span> <span class="p">=</span> <span class="k">phi</span> <span class="kt">float</span> <span class="p">[</span> <span class="nv">%97</span><span class="p">,</span> <span class="nv">%92</span> <span class="p">],</span> <span class="p">[</span> <span class="nv">%8</span><span class="p">,</span> <span class="nv">%6</span> <span class="p">]</span>
+  <span class="nv">%95</span> <span class="p">=</span> <span class="k">getelementptr</span> <span class="k">inbounds</span> <span class="kt">float</span><span class="p">,</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%0</span><span class="p">,</span> <span class="kt">i64</span> <span class="nv">%93</span>
+  <span class="nv">%96</span> <span class="p">=</span> <span class="k">load</span> <span class="kt">float</span><span class="p">,</span> <span class="kt">float</span><span class="p">*</span> <span class="nv">%95</span><span class="p">,</span> <span class="k">align</span> <span class="m">4</span><span class="p">,</span> <span class="nv">!tbaa</span> <span class="nv">!3</span>
+  <span class="nv">%97</span> <span class="p">=</span> <span class="k">fadd</span> <span class="k">fast</span> <span class="kt">float</span> <span class="nv">%96</span><span class="p">,</span> <span class="nv">%94</span>
+  <span class="nv">%98</span> <span class="p">=</span> <span class="k">add</span> <span class="k">nuw</span> <span class="kt">i64</span> <span class="nv">%93</span><span class="p">,</span> <span class="m">1</span>
+  <span class="nv">%99</span> <span class="p">=</span> <span class="k">icmp</span> <span class="k">eq</span> <span class="kt">i64</span> <span class="nv">%98</span><span class="p">,</span> <span class="nv">%1</span>
+  <span class="k">br</span> <span class="kt">i1</span> <span class="nv">%99</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%90</span><span class="p">,</span> <span class="kt">label</span> <span class="nv">%92</span><span class="p">,</span> <span class="nv">!llvm.loop</span> <span class="nv">!11</span>
+<span class="p">}</span></code></pre></figure>
+
+</div>
+<button id="button">Expand</button>
+</div>
+
+<p>Which… results in a huge IR because we didn’t forbid loop unrolling but it’s vis-a-vis what Clang would spit out in C. The important parts are the bunch of <code class="highlight language-llvm" data-lang="llvm"><span class="k">fadd</span> <span class="k">fast</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span></code> instructions and the <code class="language-plaintext highlighter-rouge">vector.reduce.v2.fadd.f32.v4f32</code>. These indicate that the flag successfully made LLVM think it’s fine to reorder the summation and vectorize the loop.</p>
+
+<p>Note that the idiomatic way of writing this in Rust:</p>
+
+<figure class="highlight"><pre><code class="language-rust" data-lang="rust"><span class="k">fn</span> <span class="nf">summation</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="o">&amp;</span><span class="p">[</span><span class="nb">f32</span><span class="p">])</span> <span class="k">-&gt;</span> <span class="nb">f32</span> <span class="p">{</span>
+    <span class="n">x</span><span class="nf">.iter</span><span class="p">()</span><span class="nf">.sum</span><span class="p">()</span>
+<span class="p">}</span></code></pre></figure>
+
+<p>would produce a different but also vectorized IR.</p>
+
+<h2 id="next">Next</h2>
+
+<p>That was easy. It took me just an afternoon from research and code spelunking to actual implementation. And this is probably one of my highest performance-gained-per-lines-of-code-changed after <a href="https://github.com/rust-lang/rust/pull/78566">Polly</a>.</p>
+
+<p>This is good and all but this <code class="language-plaintext highlighter-rouge">-Z</code> flag would blanket apply fast-math to <em>every</em> crate if you switch it on. This lack of specificity could be problematic if you do want fast-math in some hot path in the code but not in other parts maybe because the correctness in them depends on the order of operations or the resulting vectorization causes regression.<sup id="fnref:mcp" role="doc-noteref"><a href="#fn:mcp" class="footnote">1</a></sup> We remedy this in Part 2.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th style="text-align: left">Contents</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align: left"><a href="/rust/fast-math/2020/12/16/fast-math-rust-pt0.html">Part 0 - Introduction</a></td>
+    </tr>
+    <tr>
+      <td style="text-align: left"><a href="/rust/fast-math/2020/12/16/fast-math-rust-pt1.html">Part 1 - Global -Z flag</a></td>
+    </tr>
+    <tr>
+      <td style="text-align: left">Part 2 - Function attribute</td>
+    </tr>
+    <tr>
+      <td style="text-align: left">Part 3 - Crate-wide inner attribute</td>
+    </tr>
+    <tr>
+      <td style="text-align: left">Benchmarks</td>
+    </tr>
+  </tbody>
+</table>
+
+<h1 id="footnotes">Footnotes</h1>
+
+<script>
+var expanded = false;
+const code = document.getElementById("twocol");
+const expand_button = document.getElementById("button");
+expand_button.addEventListener("click", _ => {
+    if (expanded) {
+        expanded = false;
+        code.classList.toggle("expanded");
+        expand_button.textContent = "Expand";
+    } else {
+        expanded = true;
+        code.classList.toggle("expanded");
+        expand_button.textContent = "Close";
+    }
+});
+</script>
+
+<div class="footnotes" role="doc-endnotes">
+  <ol>
+    <li id="fn:mcp" role="doc-endnote">
+      <p>Which is why, even though useful, this won’t be submitted as an MCP. <a href="#fnref:mcp" class="reversefootnote" role="doc-backlink">&#8617;</a></p>
+    </li>
+  </ol>
+</div>
+
+  </div><a class="u-url" href="/rust/fast-math/2020/12/16/fast-math-rust-pt1.html" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">JRF63.github.io</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li class="p-name">Joseph Rafael Ferrer</li><li><a class="u-email" href="mailto:rafael2x0@gmail.com">rafael2x0@gmail.com</a></li></ul>
+      </div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"><li><a href="https://github.com/JRF63"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#github"></use></svg> <span class="username">JRF63</span></a></li><li><a href="https://www.twitter.com/jrtferrer"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#twitter"></use></svg> <span class="username">jrtferrer</span></a></li></ul>
+</div>
+
+      <div class="footer-col footer-col-3">
+        <details class="footer-details">
+          <summary>Buy me a pizza?</summary>
+          <div class="footer-details-content">
+            <script type="text/javascript" src="https://cdnjs.buymeacoffee.com/1.0.0/button.prod.min.js" data-name="bmc-button" data-slug="JRF63" data-color="#ffffff" data-emoji="🍕" data-font="Cookie" data-text="Buy me a pizza" data-outline-color="#000000" data-font-color="#000000" data-coffee-color="#FFDD00" ></script>
+          </div>
+        </details>
+        
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>

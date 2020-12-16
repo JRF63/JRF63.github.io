@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag v2.7.1 -->
+<title>Exploring fast-math in Rust: Part 0 - Introduction | JRF63.github.io</title>
+<meta name="generator" content="Jekyll v4.1.1" />
+<meta property="og:title" content="Exploring fast-math in Rust: Part 0 - Introduction" />
+<meta name="author" content="Joseph Rafael Ferrer" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="The -ffast-math flag" />
+<meta property="og:description" content="The -ffast-math flag" />
+<link rel="canonical" href="http://localhost:4000/rust/fast-math/2020/12/16/fast-math-rust-pt0.html" />
+<meta property="og:url" content="http://localhost:4000/rust/fast-math/2020/12/16/fast-math-rust-pt0.html" />
+<meta property="og:site_name" content="JRF63.github.io" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-12-16T08:00:00+08:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Exploring fast-math in Rust: Part 0 - Introduction" />
+<script type="application/ld+json">
+{"@type":"BlogPosting","url":"http://localhost:4000/rust/fast-math/2020/12/16/fast-math-rust-pt0.html","headline":"Exploring fast-math in Rust: Part 0 - Introduction","dateModified":"2020-12-16T08:00:00+08:00","datePublished":"2020-12-16T08:00:00+08:00","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/rust/fast-math/2020/12/16/fast-math-rust-pt0.html"},"author":{"@type":"Person","name":"Joseph Rafael Ferrer"},"description":"The -ffast-math flag","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" title="JRF63.github.io" /></head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/">JRF63.github.io</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/about/">About</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">Exploring fast-math in Rust: Part 0 - Introduction</h1>
+    <p class="post-meta">
+      <time class="dt-published" datetime="2020-12-16T08:00:00+08:00" itemprop="datePublished">Dec 16, 2020
+      </time></p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <h2 id="the--ffast-math-flag">The -ffast-math flag</h2>
+
+<p>Suppose I want to sum a bunch of floating-point numbers. In C that would probably be:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="kt">float</span> <span class="nf">summation</span><span class="p">(</span><span class="kt">float</span><span class="o">*</span> <span class="n">x</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">len</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">float</span> <span class="n">sum</span> <span class="o">=</span> <span class="mi">1</span><span class="p">.</span><span class="mi">0</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">size_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">len</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">sum</span> <span class="o">+=</span> <span class="n">x</span><span class="p">[</span><span class="n">i</span><span class="p">];</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">sum</span><span class="p">;</span>
+<span class="p">}</span></code></pre></figure>
+
+<p>Except this code did not just sum the numbers, it summed them <em>in order</em>. Floats do not behave the same way as real numbers. When I typed the code for <code class="language-plaintext highlighter-rouge">summation</code>, the compiler assumes I’m aware that floating-point addition is not associative and I indeed want the summation to be done sequentially from the first one to the last.</p>
+
+<p>The <code class="language-plaintext highlighter-rouge">-ffast-math</code> flag allows the compiler to relax the rules a bit which can allow it to do more aggressive optimizations. Like in the summation example here - by allowing the compiler to assume that float add is associative, instead of summing the numbers one by one, the compiler might decide that it’s faster to:</p>
+<ul>
+  <li>Sum the elements of <code class="language-plaintext highlighter-rouge">x</code> four at a time with SIMD</li>
+  <li>Sum the four values of the resulting vector</li>
+  <li>Then add in the 1 - 3 elements that remain (if any).<sup id="fnref:llvm_ir" role="doc-noteref"><a href="#fn:llvm_ir" class="footnote">1</a></sup></li>
+</ul>
+
+<p>And we want this in Rust. The mechanism is already in the LLVM backend, we just need to take advantage of it.</p>
+
+<h2 id="state-of-things">State of things</h2>
+
+<p>Some might note that we <em>already</em> do have fast-math available in Rust-nightly in the form of functions in <code class="language-plaintext highlighter-rouge">std::intrinsics</code>:</p>
+
+<figure class="highlight"><pre><code class="language-rust" data-lang="rust"><span class="c">// These should only be called on f32/f64 even though the type bound does not</span>
+<span class="c">// reflect this. Thankfully, rustc would throw an error if you try to call</span>
+<span class="c">// these with integer types.</span>
+<span class="k">pub</span> <span class="k">fn</span> <span class="n">fadd_fast</span><span class="o">&lt;</span><span class="n">T</span><span class="p">:</span> <span class="nb">Copy</span><span class="o">&gt;</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="n">T</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">T</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">T</span><span class="p">;</span>
+<span class="k">pub</span> <span class="k">fn</span> <span class="n">fsub_fast</span><span class="o">&lt;</span><span class="n">T</span><span class="p">:</span> <span class="nb">Copy</span><span class="o">&gt;</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="n">T</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">T</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">T</span><span class="p">;</span>
+<span class="k">pub</span> <span class="k">fn</span> <span class="n">fmul_fast</span><span class="o">&lt;</span><span class="n">T</span><span class="p">:</span> <span class="nb">Copy</span><span class="o">&gt;</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="n">T</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">T</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">T</span><span class="p">;</span>
+<span class="k">pub</span> <span class="k">fn</span> <span class="n">fdiv_fast</span><span class="o">&lt;</span><span class="n">T</span><span class="p">:</span> <span class="nb">Copy</span><span class="o">&gt;</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="n">T</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">T</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">T</span><span class="p">;</span>
+<span class="k">pub</span> <span class="k">fn</span> <span class="n">frem_fast</span><span class="o">&lt;</span><span class="n">T</span><span class="p">:</span> <span class="nb">Copy</span><span class="o">&gt;</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="n">T</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">T</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">T</span><span class="p">;</span></code></pre></figure>
+
+<p>I can think of three ways of having fast-math in Rust:</p>
+
+<ol>
+  <li>Create a <code class="language-plaintext highlighter-rouge">FastFloat</code> type that has fast-math instructions internally.</li>
+  <li>Imitate what Clang does and add it via a flag.</li>
+  <li>Add a <code class="language-plaintext highlighter-rouge">#[fast_math]</code> attribute to apply it locally to functions/statements.</li>
+</ol>
+
+<p>These gravitate towards the first one. And, yes, one could express a good deal of fast-math ops with just these. The code in the intro can be done with <code class="language-plaintext highlighter-rouge">fadd_fast</code>. But I would like to point out that these are just half of the fast-math abled operations in LLVM. The <a href="https://llvm.org/docs/LangRef.html#fast-math-flags">language reference</a> lists the floating-point ops that may have fast-math flags as <code class="language-plaintext highlighter-rouge">fneg</code>, <code class="language-plaintext highlighter-rouge">fadd</code>, <code class="language-plaintext highlighter-rouge">fsub</code>, <code class="language-plaintext highlighter-rouge">fmul</code>, <code class="language-plaintext highlighter-rouge">fdiv</code>, <code class="language-plaintext highlighter-rouge">frem</code>, <code class="language-plaintext highlighter-rouge">fcmp</code>, <code class="language-plaintext highlighter-rouge">phi</code>, <code class="language-plaintext highlighter-rouge">select</code> and <code class="language-plaintext highlighter-rouge">call</code>.</p>
+
+<p>About adding the missing ones in the same way:</p>
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">fneg</code> seems straightforward to do.</li>
+  <li><code class="language-plaintext highlighter-rouge">fcmp</code> should be fine to expose. The comparison type parameter could be an enum.</li>
+  <li><code class="language-plaintext highlighter-rouge">call</code> itself is not what is needed but the instrinsics that have approximate variants (<code class="language-plaintext highlighter-rouge">log</code>, <code class="language-plaintext highlighter-rouge">sqrt</code>, <code class="language-plaintext highlighter-rouge">exp</code>,…). Code repetitiveness aside, these instrinsics could each have <code class="language-plaintext highlighter-rouge">_fast</code> functions added without much trouble.</li>
+  <li><code class="language-plaintext highlighter-rouge">phi</code> and <code class="language-plaintext highlighter-rouge">select</code> appear <em>after</em> the compiler is done parsing the code, so these instructions are only available during LLVM IR codegen. Exposing these two via a library function does not seem feasible.<sup id="fnref:phi_footnote" role="doc-noteref"><a href="#fn:phi_footnote" class="footnote">2</a></sup></li>
+</ul>
+
+<p>A minor nitpick: Fast-math is a combination of 7 different flags and I think <code class="language-plaintext highlighter-rouge">fadd_fast</code>, et al. should take a parameter for the flags we want to enable. This can help the compiler do delicious optimizations without it doing reduced precision divides and <code class="language-plaintext highlighter-rouge">sqrt</code>’s and/or without assuming something potentially unsafe like NaNs not existing.</p>
+
+<figure class="highlight"><pre><code class="language-rust" data-lang="rust"><span class="c">// defined somewhere</span>
+<span class="nd">bitflags!</span> <span class="p">{</span>
+    <span class="nd">#[derive(Default,</span> <span class="nd">Encodable,</span> <span class="nd">Decodable)]</span>
+    <span class="k">pub</span> <span class="k">struct</span> <span class="n">FastMathFlags</span><span class="p">:</span> <span class="nb">u8</span> <span class="p">{</span>
+        <span class="o">...</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">pub</span> <span class="k">fn</span> <span class="n">fadd_fast</span><span class="o">&lt;</span><span class="n">T</span><span class="p">:</span> <span class="nb">Copy</span><span class="o">&gt;</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="n">T</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">T</span><span class="p">,</span> <span class="n">flags</span><span class="p">:</span> <span class="n">FastMathFlags</span><span class="p">)</span> <span class="k">-&gt;</span> <span class="n">T</span><span class="p">;</span></code></pre></figure>
+
+<h2 id="explosion-of-functions">Explosion of functions</h2>
+
+<p>Something more problematic with the current approach is that it won’t scale well. We also probably want fast-math for other types besides just <code class="highlight language-rust" data-lang="rust"><span class="nb">f32</span></code> and <code class="highlight language-rust" data-lang="rust"><span class="nb">f64</span></code>; if we look at <a href="https://github.com/rust-lang/llvm-project/blob/ee1617457899ef2eb55dcf7ee2758b4340b6533f/llvm/include/llvm/IR/Operator.h#L402">what LLVM does</a>, we see that fast-math <code class="language-plaintext highlighter-rouge">call</code>’s also applies to float vectors:</p>
+
+<figure class="highlight"><pre><code class="language-c--" data-lang="c++"><span class="c1">// excerpt from llvm/IR/Operator.h</span>
+<span class="k">case</span> <span class="n">Instruction</span><span class="o">::</span><span class="n">Call</span><span class="p">:</span> <span class="p">{</span>
+    <span class="n">Type</span> <span class="o">*</span><span class="n">Ty</span> <span class="o">=</span> <span class="n">V</span><span class="o">-&gt;</span><span class="n">getType</span><span class="p">();</span>
+    <span class="k">while</span> <span class="p">(</span><span class="n">ArrayType</span> <span class="o">*</span><span class="n">ArrTy</span> <span class="o">=</span> <span class="n">dyn_cast</span><span class="o">&lt;</span><span class="n">ArrayType</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Ty</span><span class="p">))</span> <span class="p">{</span>
+        <span class="n">Ty</span> <span class="o">=</span> <span class="n">ArrTy</span><span class="o">-&gt;</span><span class="n">getElementType</span><span class="p">();</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">Ty</span><span class="o">-&gt;</span><span class="n">isFPOrFPVectorTy</span><span class="p">();</span>
+<span class="p">}</span></code></pre></figure>
+
+<p><a href="https://llvm.org/docs/LangRef.html#vector-type">Vector types</a> are what LLVM uses to represent SIMD types in the IR. While researching about this topic, I found an example on <a href="https://stackoverflow.com/questions/44134061/strict-aliasing-ffast-math-and-sse">stackoverflow</a> where <code class="language-plaintext highlighter-rouge">-ffast-math</code> modifies the result of SSE intrinsics.<sup id="fnref:sse_footnote" role="doc-noteref"><a href="#fn:sse_footnote" class="footnote">3</a></sup> If we care about raw performance, we might want to also support fast-math on SIMDs.</p>
+
+<p>Consider <a href="https://software.intel.com/sites/landingpage/IntrinsicsGuide/#!=undefined&amp;text=_mm_add_ps&amp;expand=133"><code class="language-plaintext highlighter-rouge">_mm_add_ps</code></a> - an SSE intrinsic that adds four 32-bit floats contained in a <code class="language-plaintext highlighter-rouge">__m128d</code>. In Rust, this is internally a call to <a href="https://github.com/rust-lang/stdarch/blob/777efaf5644706b36706a7a5c51edb63835e05ca/crates/core_arch/src/x86/sse.rs#L31"><code class="language-plaintext highlighter-rouge">simd_add</code></a>, which is just <a href="https://github.com/rust-lang/rust/blob/1700ca07c6dd7becff85678409a5df6ad4cf4f47/compiler/rustc_codegen_llvm/src/intrinsic.rs#L1676"><code class="language-plaintext highlighter-rouge">fadd</code></a> - meaning this could be modified by a fast-math flag. An <code class="language-plaintext highlighter-rouge">_mm_add_ps_fast</code> is one thing but we have multitudes of intrinsics for multitudes of architectures; a <code class="language-plaintext highlighter-rouge">_fast</code> version for each one of them is certainly doable but doesn’t smell like good design to me.</p>
+
+<h2 id="conclusion">Conclusion</h2>
+
+<p>Let me just say that I am by no way against a <code class="language-plaintext highlighter-rouge">FastFloat</code> type. I just think a proper one would need more assistance from the compiler and not rely on the <code class="language-plaintext highlighter-rouge">_fast</code> functions. That probably needs some changes in the Rust HIR and/or MIR and cannot be done with just the information available to the backend LLVM IR.</p>
+
+<p>Since implementing a fast-math type <em>right now</em> would not fully capture what LLVM is capable of, I’m going to explore in this series of posts the other two options - fast-math via a flag and an attribute. They look easier to implement. The next part would be adding a <code class="language-plaintext highlighter-rouge">-Z</code> flag.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th style="text-align: left">Contents</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align: left"><a href="/rust/fast-math/2020/12/16/fast-math-rust-pt0.html">Part 0 - Introduction</a></td>
+    </tr>
+    <tr>
+      <td style="text-align: left"><a href="/rust/fast-math/2020/12/16/fast-math-rust-pt1.html">Part 1 - Global -Z flag</a></td>
+    </tr>
+    <tr>
+      <td style="text-align: left">Part 2 - Function attribute</td>
+    </tr>
+    <tr>
+      <td style="text-align: left">Part 3 - Crate-wide inner attribute</td>
+    </tr>
+    <tr>
+      <td style="text-align: left">Benchmarks</td>
+    </tr>
+  </tbody>
+</table>
+
+<h1 id="footnotes">Footnotes</h1>
+
+<div class="footnotes" role="doc-endnotes">
+  <ol>
+    <li id="fn:llvm_ir" role="doc-endnote">
+      <p>And that is actually what Clang <a href="https://godbolt.org/z/6rcEvs">produces</a> - add four at a time with <code class="highlight language-llvm" data-lang="llvm"><span class="k">fadd</span> <span class="k">fast</span> <span class="p">&lt;</span><span class="m">4</span> <span class="p">x</span> <span class="kt">float</span><span class="p">&gt;</span></code> then horizontally sum the SIMD vector with <code class="language-plaintext highlighter-rouge">llvm.experimental.vector.reduce.v2.fadd.f32.v4f32</code>. <a href="#fnref:llvm_ir" class="reversefootnote" role="doc-backlink">&#8617;</a></p>
+    </li>
+    <li id="fn:phi_footnote" role="doc-endnote">
+      <p>Might not matter much. LLVM is smart enough to derive <code class="language-plaintext highlighter-rouge">phi</code> and <code class="language-plaintext highlighter-rouge">select</code> from just <code class="language-plaintext highlighter-rouge">br</code>’s. And while there are a couple of usages of <code class="language-plaintext highlighter-rouge">select</code> in the LLVM backend code, I only found a total of <a href="https://github.com/rust-lang/rust/blob/1700ca07c6dd7becff85678409a5df6ad4cf4f47/compiler/rustc_codegen_llvm/src/builder.rs#L527">two</a> <a href="https://github.com/rust-lang/rust/blob/1700ca07c6dd7becff85678409a5df6ad4cf4f47/compiler/rustc_codegen_llvm/src/va_arg.rs#L157">places</a> where <code class="language-plaintext highlighter-rouge">phi</code> was used. <a href="#fnref:phi_footnote" class="reversefootnote" role="doc-backlink">&#8617;</a></p>
+    </li>
+    <li id="fn:sse_footnote" role="doc-endnote">
+      <p>This is actually <code class="language-plaintext highlighter-rouge">fcmp</code>, with Clang translating <code class="language-plaintext highlighter-rouge">_mm_cmpord_ps</code> directly to LLVM IR. Rust calls the <code class="language-plaintext highlighter-rouge">llvm.x86.sse.cmp.ps</code> intrinsic instead. <a href="#fnref:sse_footnote" class="reversefootnote" role="doc-backlink">&#8617;</a></p>
+    </li>
+  </ol>
+</div>
+
+  </div><a class="u-url" href="/rust/fast-math/2020/12/16/fast-math-rust-pt0.html" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">JRF63.github.io</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li class="p-name">Joseph Rafael Ferrer</li><li><a class="u-email" href="mailto:rafael2x0@gmail.com">rafael2x0@gmail.com</a></li></ul>
+      </div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"><li><a href="https://github.com/JRF63"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#github"></use></svg> <span class="username">JRF63</span></a></li><li><a href="https://www.twitter.com/jrtferrer"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#twitter"></use></svg> <span class="username">jrtferrer</span></a></li></ul>
+</div>
+
+      <div class="footer-col footer-col-3">
+        <details class="footer-details">
+          <summary>Buy me a pizza?</summary>
+          <div class="footer-details-content">
+            <script type="text/javascript" src="https://cdnjs.buymeacoffee.com/1.0.0/button.prod.min.js" data-name="bmc-button" data-slug="JRF63" data-color="#ffffff" data-emoji="🍕" data-font="Cookie" data-text="Buy me a pizza" data-outline-color="#000000" data-font-color="#000000" data-coffee-color="#FFDD00" ></script>
+          </div>
+        </details>
+        
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>
