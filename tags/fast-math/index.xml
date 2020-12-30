@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>fast-math on JRF63.github.io</title>
+    <link>https://JRF63.github.io/tags/fast-math/</link>
+    <description>Recent content in fast-math on JRF63.github.io</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <lastBuildDate>Tue, 29 Dec 2020 05:00:00 +0800</lastBuildDate><atom:link href="https://JRF63.github.io/tags/fast-math/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Exploring fast-math in Rust: Part 2 - Function attribute</title>
+      <link>https://JRF63.github.io/posts/rust-fast-math/pt2/</link>
+      <pubDate>Tue, 29 Dec 2020 05:00:00 +0800</pubDate>
+      
+      <guid>https://JRF63.github.io/posts/rust-fast-math/pt2/</guid>
+      <description>TL;DR - This branch on my fork.
+Part 0 - Introduction Part 1 - Global -Z flag Part 2 - Function attribute    function follow(pages) { self.location = pages.options[pages.selectedIndex].value; } </description>
+    </item>
+    
+    <item>
+      <title>Exploring fast-math in Rust: Part 1 - Global -Z flag</title>
+      <link>https://JRF63.github.io/posts/rust-fast-math/pt1/</link>
+      <pubDate>Wed, 16 Dec 2020 11:00:00 +0800</pubDate>
+      
+      <guid>https://JRF63.github.io/posts/rust-fast-math/pt1/</guid>
+      <description>#twocol { position: relative; display: flex; margin-bottom: 15px; overflow-y: hidden; } .closed { height: 700px; transition: height 0.8s ease-in-out; } .expanded { height: 2455px; } #subcol { flex: 1 1; overflow-x: hidden; overflow-y: hidden; } #subcol  figure, #subcol  figure  pre { margin-bottom: 0px; scrollbar-width: none; } #subcol  figure  pre::-webkit-scrollbar { display: none; } #divider { flex-basis: 4px; } #button { position: absolute; left: 0%; bottom: 0%; width: 100%; border: none; outline: none; height: 30px; background: linear-gradient(to top, #cccccc, Transparent); opacity: 0.</description>
+    </item>
+    
+    <item>
+      <title>Exploring fast-math in Rust: Part 0 - Introduction</title>
+      <link>https://JRF63.github.io/posts/rust-fast-math/pt0/</link>
+      <pubDate>Wed, 16 Dec 2020 08:00:00 +0800</pubDate>
+      
+      <guid>https://JRF63.github.io/posts/rust-fast-math/pt0/</guid>
+      <description>Suppose I want to sum a bunch of floating-point numbers. In C that would probably be:
+float summation(float* x, size_t len) { float sum = 1.0; for (size_t i = 0; i &amp;lt; len; i++) { sum += x[i]; } return sum; } Except this code did not just sum the numbers, it summed them in order. Floats do not behave the same way as real numbers. When I typed the code for summation, the compiler assumes I&amp;rsquo;m aware that floating-point addition is not associative and I indeed want the summation to be done sequentially from the first one to the last.</description>
+    </item>
+    
+  </channel>
+</rss>

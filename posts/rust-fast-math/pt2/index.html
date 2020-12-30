@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width">
+    <script type="application/javascript" src='https://JRF63.github.io/js/theme-mode.js'></script>
+    <link rel="stylesheet" href='https://JRF63.github.io/css/frameworks.min.css' />
+    <link rel="stylesheet" href='https://JRF63.github.io/css/github.min.css' />
+    <link rel="stylesheet" href='https://JRF63.github.io/css/github-style.css' />
+    <link rel="stylesheet" href='https://JRF63.github.io/css/light.css' />
+    <link rel="stylesheet" href='https://JRF63.github.io/css/dark.css' />
+    <link rel="stylesheet" href='https://JRF63.github.io/css/syntax.css' />
+    <link rel="stylesheet" href='https://JRF63.github.io/css/base.css' />
+    <title>Exploring fast-math in Rust: Part 2 - Function attribute - JRF63.github.io</title>
+    <link rel="icon" type="image/x-icon" href='https://JRF63.github.io/images/favicon.ico'>
+    <meta name="theme-color" content="#1e2327">
+
+    
+    <meta name="description"
+  content="TL;DR - This branch on my fork.
+Part 0 - Introduction Part 1 - Global -Z flag Part 2 - Function attribute    function follow(pages) { self.location = pages.options[pages.selectedIndex].value; } " />
+<meta name="keywords"
+  content='' />
+<meta name="robots" content="noodp" />
+<link rel="canonical" href="https://JRF63.github.io/posts/rust-fast-math/pt2/" />
+
+
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="Exploring fast-math in Rust: Part 2 - Function attribute - JRF63.github.io" />
+<meta name="twitter:description"
+  content="TL;DR - This branch on my fork.
+Part 0 - Introduction Part 1 - Global -Z flag Part 2 - Function attribute    function follow(pages) { self.location = pages.options[pages.selectedIndex].value; } " />
+<meta name="twitter:site" content="https://JRF63.github.io/" />
+<meta name="twitter:creator" content="" />
+<meta name="twitter:image"
+  content="https://JRF63.github.io/">
+
+
+<meta property="og:type" content="article" />
+<meta property="og:title" content="Exploring fast-math in Rust: Part 2 - Function attribute - JRF63.github.io">
+<meta property="og:description"
+  content="TL;DR - This branch on my fork.
+Part 0 - Introduction Part 1 - Global -Z flag Part 2 - Function attribute    function follow(pages) { self.location = pages.options[pages.selectedIndex].value; } " />
+<meta property="og:url" content="https://JRF63.github.io/posts/rust-fast-math/pt2/" />
+<meta property="og:site_name" content="Exploring fast-math in Rust: Part 2 - Function attribute" />
+<meta property="og:image"
+  content="https://JRF63.github.io/">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1024">
+
+<meta property="article:published_time" content="2020-12-29 05:00:00 &#43;0800 &#43;08" />
+
+
+
+
+
+
+
+
+
+
+</head>
+
+<body>
+  <div>
+  <header class="header-wrapper">
+    <div class="header-container">
+      <div class="header-dummy"></div>
+      <div class="title-container">
+        <a class="link" href="https://JRF63.github.io/">
+          <span class="site-title">JRF63.github.io</span>
+        </a>
+      </div>
+      <div class="header-menu">
+        <div class="slider-slot">
+          <div class="slider" onclick="switchTheme()">
+            <svg style="fill: var(--color-profile-color-modes-toggle-moon); margin: 7px 0 0 7px;" width="14"
+              height="13" viewBox="0 0 14 13" xmlns="http://www.w3.org/2000/svg" >
+              <path fill-rule="evenodd" clip-rule="evenodd"
+                d="M4.52208 7.71754C7.5782 7.71754 10.0557 5.24006 10.0557 2.18394C10.0557 1.93498 10.0392 1.68986 10.0074 1.44961C9.95801 1.07727 10.3495 0.771159 10.6474 0.99992C12.1153 2.12716 13.0615 3.89999 13.0615 5.89383C13.0615 9.29958 10.3006 12.0605 6.89485 12.0605C3.95334 12.0605 1.49286 10.001 0.876728 7.24527C0.794841 6.87902 1.23668 6.65289 1.55321 6.85451C2.41106 7.40095 3.4296 7.71754 4.52208 7.71754Z">
+              </path>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+</div>
+  
+<div class="main-wrapper">
+  <main class="main-content">
+    <div class="post-header">
+      <div class="post-info">
+        <div class="post-date">December 29, 2020</div>
+        <div class="post-tags">
+          <div></div>
+          
+          
+          <a class="post-tag link" href="/tags/rust">
+            Rust
+          </a>
+          
+          <a class="post-tag link" href="/tags/fast-math">
+            fast-math
+          </a>
+          
+          
+        </div>
+      </div>
+      <h1 class="post-title">Exploring fast-math in Rust: Part 2 - Function attribute</h1>
+    </div>
+    <article class="markdown-body article-wrapper"><p>TL;DR - This <a href="https://github.com/JRF63/rust/tree/fastmath-function-attribute">branch</a> on my fork.</p>
+<div class="pages-list">
+<select name="pages" onchange="follow(this)">
+    <option value="/posts/rust-fast-math/pt0">Part 0 - Introduction</option>
+    <option value="/posts/rust-fast-math/pt1">Part 1 - Global -Z flag</option>
+    <option selected="selected" value="/posts/rust-fast-math/pt2">Part 2 - Function attribute</option>
+</select>
+</div>
+<script>
+function follow(pages) {
+    self.location = pages.options[pages.selectedIndex].value;
+}
+</script></article>
+  </main>
+</div>
+
+  
+<div class="footer-wrapper">
+  <div class="footer-container">
+    <div></div>
+    <div class="footer-left">
+      
+      
+      
+      
+      <div class="contact">
+        <svg class="svgicon">
+          <use href="https://JRF63.github.io/icons.svg#envelope"></use>
+        </svg>
+        <a class="link" href="mailto:rafael2x0@gmail.com">rafael2x0@gmail.com</a>
+      </div>
+      
+      <div class="contact">
+        <svg class="svgicon">
+          <use href="https://JRF63.github.io/icons.svg#github"></use>
+        </svg>
+        <a class="link" href="https://github.com/JRF63">JRF63</a>
+      </div>
+      
+      <div class="contact">
+        <svg class="svgicon">
+          <use href="https://JRF63.github.io/icons.svg#twitter"></use>
+        </svg>
+        <a class="link" href="https://www.twitter.com/jrtferrer">jrtferrer</a>
+      </div>
+      
+    </div>
+    <div class="footer-right">
+      <div class="pizza">🍕</div>
+      <a class="link" href="http://buymeacoffee.com/JRF63"><span>Buy me a pizza?</span></a>
+    </div>
+    <div class="footer-bottom">
+      Powered by <a class="link" href="https://gohugo.io"><span>Hugo</span></a>
+    </div>
+  </div>
+</div>
+</body>
+
+
+
+</html>
